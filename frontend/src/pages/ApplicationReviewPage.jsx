@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
+import { RadialBar, RadialBarChart, BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -255,6 +255,68 @@ export default function ApplicationReviewPage() {
           </CardContent>
         </Card>
       </section>
+
+      {application.ai_analysis && (
+        <Card data-testid="admin-ai-analysis-card">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle data-testid="admin-ai-analysis-heading">AI Underwriting Analysis</CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs capitalize" data-testid="admin-ai-method-badge">
+                  {application.underwriting_method?.replace("_", " ") ?? "rules"}
+                </Badge>
+                <Badge
+                  className={`capitalize ${
+                    application.ai_analysis.decision === "approved"
+                      ? "bg-green-100 text-green-800"
+                      : application.ai_analysis.decision === "rejected"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}
+                  data-testid="admin-ai-decision-badge"
+                >
+                  AI: {application.ai_analysis.decision}
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-[auto_1fr] gap-6">
+            <div className="flex flex-col items-center gap-1" data-testid="admin-ai-score-display">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">AI Score</p>
+              <p className="text-5xl font-bold tabular-nums" data-testid="admin-ai-score-value">
+                {application.ai_analysis.score}
+              </p>
+              <p className="text-xs text-muted-foreground">out of 100</p>
+            </div>
+            {application.ai_analysis.shap_values && (
+              <div data-testid="admin-ai-shap-chart">
+                <p className="text-xs text-muted-foreground mb-2">Feature contributions (SHAP values)</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart
+                    layout="vertical"
+                    data={Object.entries(application.ai_analysis.shap_values)
+                      .map(([name, value]) => ({ name: name.replaceAll("_", " "), value }))
+                      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))}
+                    margin={{ left: 8, right: 24, top: 0, bottom: 0 }}
+                  >
+                    <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => v.toFixed(2)} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                    <Tooltip formatter={(v) => v.toFixed(4)} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                      {Object.entries(application.ai_analysis.shap_values)
+                        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+                        .map(([, v], i) => (
+                          <Cell key={i} fill={v >= 0 ? "#22c55e" : "#ef4444"} />
+                        ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-xs text-muted-foreground mt-1">Green = pushes toward approval · Red = pushes toward rejection</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

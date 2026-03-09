@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
 import { api, authHeaders } from "@/lib/api";
 
@@ -62,6 +64,7 @@ export default function RulesManagementPage() {
           weight_income: Number(rule.weight_income),
           weight_dti: Number(rule.weight_dti),
           weight_employment: Number(rule.weight_employment),
+          use_ai_model: Boolean(rule.use_ai_model),
         },
         { headers: authHeaders() },
       );
@@ -96,6 +99,28 @@ export default function RulesManagementPage() {
             </CardHeader>
 
             <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium" htmlFor={`${rule.loan_type}_use_ai`}>
+                    AI Underwriting
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Use LightGBM model; falls back to rules if unavailable
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={rule.use_ai_model ? "default" : "secondary"} className="text-xs">
+                    {rule.use_ai_model ? "AI" : "Rules"}
+                  </Badge>
+                  <Switch
+                    id={`${rule.loan_type}_use_ai`}
+                    checked={Boolean(rule.use_ai_model)}
+                    onCheckedChange={(checked) => updateField(rule.loan_type, "use_ai_model", checked)}
+                    data-testid={`admin-rule-${rule.loan_type}-use-ai-toggle`}
+                  />
+                </div>
+              </div>
+
               {fields.map((field) => (
                 <div key={field} className="space-y-2">
                   <Label className="capitalize" htmlFor={`${rule.loan_type}_${field}`}>
