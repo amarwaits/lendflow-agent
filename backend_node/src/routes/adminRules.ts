@@ -40,11 +40,13 @@ adminRulesRouter.put('/:loanType', validate(UnderwritingRuleUpdateSchema), (req:
     UPDATE underwriting_rules
     SET min_credit_score = ?, max_dti = ?, approval_score = ?, review_score = ?,
         weight_credit = ?, weight_income = ?, weight_dti = ?, weight_employment = ?,
+        use_ai_model = ?,
         updated_at = ?
     WHERE loan_type = ?
   `).run(
     payload.min_credit_score, payload.max_dti, payload.approval_score, payload.review_score,
     payload.weight_credit, payload.weight_income, payload.weight_dti, payload.weight_employment,
+    payload.use_ai_model ? 1 : 0,
     now, loanType,
   );
 

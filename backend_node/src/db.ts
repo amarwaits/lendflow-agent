@@ -75,6 +75,24 @@ export function initDb(): void {
     )
   `);
 
+  // Idempotent column migrations (SQLite has no IF NOT EXISTS for columns)
+  const appMigrations = [
+    "ALTER TABLE applications ADD COLUMN ai_score REAL",
+    "ALTER TABLE applications ADD COLUMN ai_decision TEXT",
+    "ALTER TABLE applications ADD COLUMN ai_shap_values TEXT",
+    "ALTER TABLE applications ADD COLUMN underwriting_method TEXT NOT NULL DEFAULT 'rules'",
+  ];
+  for (const sql of appMigrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
+  }
+
+  const ruleMigrations = [
+    "ALTER TABLE underwriting_rules ADD COLUMN use_ai_model INTEGER NOT NULL DEFAULT 0",
+  ];
+  for (const sql of ruleMigrations) {
+    try { db.exec(sql); } catch { /* column already exists */ }
+  }
+
   const now = utcNowIso();
   const insertRule = db.prepare(`
     INSERT OR IGNORE INTO underwriting_rules (

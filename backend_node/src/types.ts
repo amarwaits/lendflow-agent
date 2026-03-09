@@ -59,6 +59,7 @@ export const UnderwritingRuleUpdateSchema = z.object({
   weight_income: z.number().gt(0),
   weight_dti: z.number().gt(0),
   weight_employment: z.number().gt(0),
+  use_ai_model: z.boolean().optional().default(false),
 });
 export type UnderwritingRuleUpdateInput = z.infer<typeof UnderwritingRuleUpdateSchema>;
 
@@ -85,6 +86,11 @@ export interface ApplicationRow {
   status: string;
   override_reason: string | null;
   admin_notes: string | null;
+  // AI underwriting fields (nullable — populated only when AI model is active)
+  ai_score: number | null;
+  ai_decision: string | null;
+  ai_shap_values: string | null;  // JSON blob
+  underwriting_method: string;    // 'rules' | 'ai' | 'ai_fallback'
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +105,7 @@ export interface RuleRow {
   weight_income: number;
   weight_dti: number;
   weight_employment: number;
+  use_ai_model: number;  // SQLite integer boolean (0 | 1)
   updated_at: string;
 }
 

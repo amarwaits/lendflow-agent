@@ -4,6 +4,7 @@ import { requireAdmin, AuthenticatedRequest } from '../auth';
 import { validate } from '../middleware/validate';
 import { StatusUpdateSchema, OverrideSchema, NoteSchema, ApplicationRow, AuditRow, RuleRow } from '../types';
 import { calculateUnderwriting, decisionToStatus } from '../underwriting';
+import { callAiUnderwriting } from '../aiUnderwriting';
 import { utcNowIso } from '../utils';
 import { rowToApplicationResponse } from './public';
 
@@ -144,7 +145,7 @@ adminApplicationsRouter.post('/:applicationId/notes', validate(NoteSchema), (req
   res.json(rowToApplicationResponse(updated));
 });
 
-adminApplicationsRouter.post('/:applicationId/reevaluate', (req: Request, res: Response) => {
+adminApplicationsRouter.post('/:applicationId/reevaluate', async (req: Request, res: Response) => {
   const db = getDb();
   const { applicationId } = req.params;
   const admin = (req as AuthenticatedRequest).adminUser;
@@ -161,20 +162,45 @@ adminApplicationsRouter.post('/:applicationId/reevaluate', (req: Request, res: R
     return;
   }
 
-  const scoring = calculateUnderwriting(
-    {
-      loan_type: row.loan_type as 'home' | 'car' | 'personal',
-      full_name: row.full_name,
-      email: row.email,
-      phone: row.phone,
-      annual_income: row.annual_income,
-      loan_amount: row.loan_amount,
-      credit_score: row.credit_score,
-      monthly_debt: row.monthly_debt,
-      employment_years: row.employment_years,
-    },
-    rule,
-  );
+  const appPayload = {
+    loan_type: row.loan_type as 'home' | 'car' | 'personal',
+    full_name: row.full_name,
+    email: row.email,
+    phone: row.phone,
+    annual_income: row.annual_income,
+    loan_amount: row.loan_amount,
+    credit_score: row.credit_score,
+    monthly_debt: row.monthly_debt,
+    employment_years: row.employment_years,
+  };
+
+  const scoring = calculateUnderwriting(appPayload, rule);
+
+  // Re-run AI scoring if enabled for this loan type
+  let aiScore: number | null = null;
+  let aiDecision: string | null = null;
+  let aiShapValues: string | null = null;
+  let underwritingMethod = 'rules';
+
+  if (rule.use_ai_model) {
+    const aiResult = await callAiUnderwriting(appPayload);
+    if (aiResult) {
+      aiScore = aiResult.ai_score;
+      aiDecision = aiResult.ai_decision;
+      aiShapValues = aiResult.ai_shap_values;
+      underwritingMethod = 'ai';
+    } else {
+      underwritingMethod = 'ai_fallback';
+    }
+  }
+
+  const hardReject =
+    row.credit_score < rule.min_credit_score ||
+    scoring.debt_to_income > rule.max_dti;
+
+  const effectiveDecision = hardReject
+    ? 'rejected'
+    : aiDecision ?? scoring.auto_decision;
 
   let final_decision: string;
   let status: string;
@@ -182,27 +208,30 @@ adminApplicationsRouter.post('/:applicationId/reevaluate', (req: Request, res: R
     final_decision = row.final_decision;
     status = 'overridden';
   } else {
-    final_decision = scoring.auto_decision;
-    status = decisionToStatus(scoring.auto_decision);
+    final_decision = effectiveDecision;
+    status = decisionToStatus(effectiveDecision);
   }
 
   const now = utcNowIso();
   db.prepare(`
     UPDATE applications
     SET debt_to_income = ?, score_credit = ?, score_income = ?, score_dti = ?, score_employment = ?,
-        weighted_score = ?, auto_decision = ?, final_decision = ?, status = ?, updated_at = ?
+        weighted_score = ?, auto_decision = ?, final_decision = ?, status = ?,
+        ai_score = ?, ai_decision = ?, ai_shap_values = ?, underwriting_method = ?,
+        updated_at = ?
     WHERE id = ?
   `).run(
     scoring.debt_to_income, scoring.score_credit, scoring.score_income, scoring.score_dti, scoring.score_employment,
-    scoring.weighted_score, scoring.auto_decision, final_decision, status, now,
-    applicationId,
+    scoring.weighted_score, effectiveDecision, final_decision, status,
+    aiScore, aiDecision, aiShapValues, underwritingMethod,
+    now, applicationId,
   );
 
   addAuditEntry(
     applicationId,
     're_evaluated',
     admin,
-    'Application re-evaluated with latest underwriting rule weights.',
+    `Re-evaluated with method: ${underwritingMethod}. Decision: ${effectiveDecision}.`,
   );
 
   const updated = db.prepare('SELECT * FROM applications WHERE id = ?').get(applicationId) as ApplicationRow;
