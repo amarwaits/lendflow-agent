@@ -1,6 +1,20 @@
 version: "3.9"
 
 services:
+  ml-service:
+    build:
+      context: ./ml_service
+      dockerfile: Dockerfile
+    container_name: lendflow-ml-service
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   backend:
     build:
       context: .
@@ -10,10 +24,14 @@ services:
       - ./backend_node/.env
     environment:
       DB_PATH: /data/loan_onboarding.db
+      ML_SERVICE_URL: http://ml-service:8002
     ports:
       - "8001:8001"
     volumes:
       - db_data:/data
+    depends_on:
+      ml-service:
+        condition: service_healthy
 
   frontend:
     image: node:20-alpine
